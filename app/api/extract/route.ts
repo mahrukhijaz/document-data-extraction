@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.LANDINGAI_API_KEY;
-    const apiUrl = process.env.LANDINGAI_API_URL || 'https://api.landing.ai/v1/dpt/extract';
+    const apiUrl = process.env.LANDINGAI_API_URL || 'https://api.va.landing.ai/v1/ade/parse';
 
     if (!apiKey) {
       return NextResponse.json(
@@ -78,16 +78,16 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Create form data for LandingAI API
+    // Create form data for LandingAI ADE Parse API
     const landingAIFormData = new FormData();
-    landingAIFormData.append('file', new Blob([buffer], { type: file.type }), file.name);
+    landingAIFormData.append('document', new Blob([buffer], { type: file.type }), file.name);
+    landingAIFormData.append('model', 'dpt-2-latest');
 
-    // Call LandingAI DPT API
-    // Try using apikey header instead of Authorization
+    // Call LandingAI ADE Parse API
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'apikey': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: landingAIFormData,
     });

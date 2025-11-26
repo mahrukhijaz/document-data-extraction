@@ -28,10 +28,12 @@ export interface InvoiceData {
 
 // LandingAI API response structure
 interface LandingAIResponse {
-  predictions?: any;
-  extracted_data?: any;
-  fields?: Record<string, any>;
-  data?: any;
+  data?: {
+    extracted_schema?: any;
+    markdown?: string;
+    extraction_metadata?: any;
+    chunks?: any[];
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.LANDINGAI_API_KEY;
-    const apiUrl = process.env.LANDINGAI_API_URL || 'https://api.va.landing.ai/v1/ade/parse';
+    const apiUrl = process.env.LANDINGAI_API_URL || 'https://api.va.landing.ai/v1/tools/agentic-document-analysis';
 
     if (!apiKey) {
       return NextResponse.json(
@@ -78,12 +80,50 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Create form data for LandingAI ADE Parse API
-    const landingAIFormData = new FormData();
-    landingAIFormData.append('document', new Blob([buffer], { type: file.type }), file.name);
-    landingAIFormData.append('model', 'dpt-2-latest');
+    // Define the JSON schema for invoice extraction
+    const invoiceSchema = {
+      type: 'object',
+      properties: {
+        invoice_number: { type: 'string', description: 'The invoice number or ID' },
+        invoice_date: { type: 'string', description: 'The date the invoice was issued' },
+        due_date: { type: 'string', description: 'The payment due date' },
+        po_number: { type: 'string', description: 'Purchase order number if present' },
+        vendor_name: { type: 'string', description: 'Name of the vendor or seller' },
+        vendor_address: { type: 'string', description: 'Full address of the vendor' },
+        vendor_contact: { type: 'string', description: 'Vendor phone, email or contact info' },
+        customer_name: { type: 'string', description: 'Name of the customer or buyer' },
+        customer_address: { type: 'string', description: 'Full address of the customer' },
+        line_items: {
+          type: 'array',
+          description: 'List of items or services on the invoice',
+          items: {
+            type: 'object',
+            properties: {
+              description: { type: 'string', description: 'Item or service description' },
+              quantity: { type: 'number', description: 'Quantity or hours' },
+              unit_price: { type: 'number', description: 'Price per unit' },
+              amount: { type: 'number', description: 'Total amount for this line item' }
+            }
+          }
+        },
+        subtotal: { type: 'number', description: 'Subtotal before tax and discounts' },
+        discount: { type: 'number', description: 'Discount amount if any' },
+        tax: { type: 'number', description: 'Tax amount' },
+        shipping: { type: 'number', description: 'Shipping or handling fees' },
+        total: { type: 'number', description: 'Final total amount due' },
+        currency: { type: 'string', description: 'Currency code (USD, EUR, etc.)' }
+      }
+    };
 
-    // Call LandingAI ADE Parse API
+    // Create form data for LandingAI Agentic Document Analysis API
+    const landingAIFormData = new FormData();
+
+    // Use 'pdf' or 'image' field name depending on file type
+    const fieldName = file.type === 'application/pdf' ? 'pdf' : 'image';
+    landingAIFormData.append(fieldName, new Blob([buffer], { type: file.type }), file.name);
+    landingAIFormData.append('fields_schema', JSON.stringify(invoiceSchema));
+
+    // Call LandingAI Agentic Document Analysis API
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -131,67 +171,63 @@ export async function POST(request: NextRequest) {
 function parseInvoiceData(response: LandingAIResponse): InvoiceData {
   const invoiceData: InvoiceData = {};
 
-  // The actual structure depends on LandingAI's response format
-  // This is a flexible parser that handles various response structures
-  const data = response.predictions || response.extracted_data || response.fields || response.data || {};
+  // Extract from the extracted_schema field
+  const extracted = response.data?.extracted_schema || {};
 
-  // Extract common invoice fields
-  if (data.invoice_number || data.invoiceNumber || data.invoice_no) {
-    invoiceData.invoiceNumber = data.invoice_number || data.invoiceNumber || data.invoice_no;
+  // Map the extracted schema to our invoice data structure
+  if (extracted.invoice_number) {
+    invoiceData.invoiceNumber = extracted.invoice_number;
   }
 
-  if (data.invoice_date || data.invoiceDate || data.date) {
-    invoiceData.invoiceDate = data.invoice_date || data.invoiceDate || data.date;
+  if (extracted.invoice_date) {
+    invoiceData.invoiceDate = extracted.invoice_date;
   }
 
-  if (data.due_date || data.dueDate) {
-    invoiceData.dueDate = data.due_date || data.dueDate;
+  if (extracted.due_date) {
+    invoiceData.dueDate = extracted.due_date;
   }
 
-  if (data.vendor_name || data.vendorName || data.supplier || data.from) {
-    invoiceData.vendorName = data.vendor_name || data.vendorName || data.supplier || data.from;
+  if (extracted.vendor_name) {
+    invoiceData.vendorName = extracted.vendor_name;
   }
 
-  if (data.vendor_address || data.vendorAddress || data.supplier_address) {
-    invoiceData.vendorAddress = data.vendor_address || data.vendorAddress || data.supplier_address;
+  if (extracted.vendor_address) {
+    invoiceData.vendorAddress = extracted.vendor_address;
   }
 
-  if (data.customer_name || data.customerName || data.bill_to || data.to) {
-    invoiceData.customerName = data.customer_name || data.customerName || data.bill_to || data.to;
+  if (extracted.customer_name) {
+    invoiceData.customerName = extracted.customer_name;
   }
 
-  if (data.customer_address || data.customerAddress || data.billing_address) {
-    invoiceData.customerAddress = data.customer_address || data.customerAddress || data.billing_address;
+  if (extracted.customer_address) {
+    invoiceData.customerAddress = extracted.customer_address;
   }
 
   // Extract line items
-  if (data.line_items || data.lineItems || data.items) {
-    const items = data.line_items || data.lineItems || data.items;
-    if (Array.isArray(items)) {
-      invoiceData.lineItems = items.map((item: any) => ({
-        description: item.description || item.name || item.item || '',
-        quantity: parseFloat(item.quantity || item.qty || 0),
-        unitPrice: parseFloat(item.unit_price || item.unitPrice || item.price || 0),
-        amount: parseFloat(item.amount || item.total || item.line_total || 0),
-      }));
-    }
+  if (extracted.line_items && Array.isArray(extracted.line_items)) {
+    invoiceData.lineItems = extracted.line_items.map((item: any) => ({
+      description: item.description || '',
+      quantity: item.quantity || 0,
+      unitPrice: item.unit_price || 0,
+      amount: item.amount || 0,
+    }));
   }
 
   // Extract totals
-  if (data.subtotal || data.sub_total) {
-    invoiceData.subtotal = parseFloat(data.subtotal || data.sub_total);
+  if (extracted.subtotal !== undefined) {
+    invoiceData.subtotal = extracted.subtotal;
   }
 
-  if (data.tax || data.tax_amount || data.vat) {
-    invoiceData.tax = parseFloat(data.tax || data.tax_amount || data.vat);
+  if (extracted.tax !== undefined) {
+    invoiceData.tax = extracted.tax;
   }
 
-  if (data.total || data.total_amount || data.grand_total) {
-    invoiceData.total = parseFloat(data.total || data.total_amount || data.grand_total);
+  if (extracted.total !== undefined) {
+    invoiceData.total = extracted.total;
   }
 
-  if (data.currency) {
-    invoiceData.currency = data.currency;
+  if (extracted.currency) {
+    invoiceData.currency = extracted.currency;
   }
 
   return invoiceData;

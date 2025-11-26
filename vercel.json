@@ -3,9 +3,5 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["iad1"],
-  "env": {
-    "LANDINGAI_API_KEY": "@landingai_api_key",
-    "LANDINGAI_API_URL": "https://api.landing.ai/v1/dpt/extract"
-  }
+  "regions": ["iad1"]
 }

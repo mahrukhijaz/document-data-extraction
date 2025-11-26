@@ -81,13 +81,13 @@ export async function POST(request: NextRequest) {
     // Create form data for LandingAI API
     const landingAIFormData = new FormData();
     landingAIFormData.append('file', new Blob([buffer], { type: file.type }), file.name);
-    landingAIFormData.append('document_type', 'invoice');
 
     // Call LandingAI DPT API
+    // Try using apikey header instead of Authorization
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${apiKey}`,
+        'apikey': apiKey,
       },
       body: landingAIFormData,
     });

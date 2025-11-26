@@ -477,7 +477,7 @@ export default function Home() {
                   </div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">No Data Yet</h3>
                   <p className="text-sm text-gray-500 max-w-sm">
-                    Upload an invoice and click "Extract Data" to see the results here
+                    Upload an invoice and click &quot;Extract Data&quot; to see the results here
                   </p>
                 </CardContent>
               </Card>

@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Basic ${apiKey}`,
       },
       body: landingAIFormData,
     });
